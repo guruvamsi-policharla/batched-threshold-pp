@@ -16,6 +16,7 @@ blake3 = { version = "1.0", default-features = false }
 merlin = { version = "3.0", default-features = false }
 retry = { version = "2.0", default-features = false }
 criterion = { version = "0.5", features = ["html_reports"] }
+rand = { version = "0.8", features = ["std"] }
 
 [features]
 asm = [ "ark-ff/asm" ]

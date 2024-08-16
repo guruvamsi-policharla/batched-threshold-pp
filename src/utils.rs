@@ -1,11 +1,12 @@
-use ark_ec::{pairing::Pairing, CurveGroup, VariableBaseMSM};
-use ark_ff::{batch_inversion, FftField, PrimeField};
+use ark_ec::{pairing::Pairing, CurveGroup, Group, VariableBaseMSM};
+use ark_ff::PrimeField;
 use ark_poly::{
     univariate::DensePolynomial, DenseUVPolynomial, EvaluationDomain, Polynomial,
     Radix2EvaluationDomain,
 };
 use ark_serialize::CanonicalSerialize;
 use ark_std::{One, Zero};
+use merlin::Transcript;
 use std::ops::Div;
 
 use crate::dealer::CRS;
@@ -37,56 +38,14 @@ pub fn xor(a: &[u8], b: &[u8]) -> Vec<u8> {
     a.iter().zip(b.iter()).map(|(x, y)| x ^ y).collect()
 }
 
-/// interpolates a polynomial on a domain that is *almost* good
-/// say there exists a smooth domain of size d, and the degree of the polynomial is d
-/// then there is one point outside the nice domain. to interpolate we use the fact
-/// that the quotient polynomial is degree d-1 and interpolate it on the nice domain
-/// and then recvoer the original polynomial
-/// q(x) = (f(x) - f(gamma)) / (x-gamma), where gamma is the bad point
-pub fn interpolate_almostgood<F: FftField>(
-    fevals: &Vec<F>,
-    domain: &Radix2EvaluationDomain<F>,
-    fofgamma: F,
-    gamma: F,
-) -> Vec<F> {
-    let mut qevals = vec![F::zero(); domain.size()];
-    let mut den: Vec<F> = domain.elements().collect();
-    den.iter_mut().for_each(|x| *x -= gamma);
-
-    // batch invert den
-    batch_inversion(&mut den);
-
-    for i in 0..domain.size() {
-        qevals[i] = (fevals[i] - fofgamma) * den[i];
-    }
-    let q = domain.ifft(&qevals);
-
-    let mut f = vec![F::zero(); domain.size() + 1];
-    f[0] = fofgamma - gamma * q[0];
-    for i in 1..domain.size() {
-        f[i] = q[i - 1] - gamma * q[i];
-    }
-    f[domain.size()] = q[domain.size() - 1];
-
-    f
-}
-
-/// takes an input a domain and an evaluation point and generates lagrange coefficients for the same
-pub fn lagrange_coefficients<F: FftField>(domain: Vec<F>, x: F) -> Vec<F> {
-    let mut lag_coeffs: Vec<F> = vec![F::one(); domain.len()];
-    for i in 0..domain.len() {
-        let mut num = F::one();
-        let mut den = F::one();
-        for j in 0..domain.len() {
-            if i != j {
-                num *= x - domain[j];
-                den *= domain[i] - domain[j];
-            }
-        }
-        lag_coeffs[i] = num / den;
-    }
-
-    lag_coeffs
+pub fn add_to_transcript<T: CanonicalSerialize>(
+    ts: &mut Transcript,
+    label: &'static [u8],
+    data: T,
+) {
+    let mut data_bytes = Vec::new();
+    data.serialize_uncompressed(&mut data_bytes).unwrap();
+    ts.append_message(label, &data_bytes);
 }
 
 /// compute KZG opening proof
@@ -104,24 +63,15 @@ pub fn compute_opening_proof<E: Pairing>(
     ]);
     let witness_polynomial = numerator.div(&divisor);
 
-    commit_g1::<E>(&crs.powers_of_g, &witness_polynomial)
+    pedersen_commit::<E::G1>(&crs.powers_of_g, &witness_polynomial.coeffs())
 }
 
-pub fn commit_g1<E: Pairing>(srs: &[E::G1], polynomial: &DensePolynomial<E::ScalarField>) -> E::G1 {
-    if srs.len() - 1 < polynomial.degree() {
-        panic!(
-            "SRS size to small! Can't commit to polynomial of degree {} with srs of size {}",
-            polynomial.degree(),
-            srs.len()
-        );
-    }
+pub fn pedersen_commit<G: Group + CurveGroup>(bases: &[G], scalars: &[G::ScalarField]) -> G {
+    debug_assert_eq!(bases.len(), scalars.len());
 
-    let plain_coeffs = convert_to_bigints(&polynomial.coeffs());
-    let affine_srs = srs
-        .iter()
-        .map(|g| g.into_affine())
-        .collect::<Vec<E::G1Affine>>();
-    <E::G1 as VariableBaseMSM>::msm_bigint(&affine_srs, &plain_coeffs)
+    let plain_scalars = convert_to_bigints(&scalars);
+    let affine_bases = bases.iter().map(|g| g.into_affine()).collect::<Vec<_>>();
+    <G as VariableBaseMSM>::msm_bigint(&affine_bases, &plain_scalars)
 }
 
 fn convert_to_bigints<F: PrimeField>(p: &[F]) -> Vec<F::BigInt> {
@@ -189,7 +139,7 @@ mod tests {
         let domain_size = 1 << 5;
         let domain = Radix2EvaluationDomain::<Fr>::new(domain_size).unwrap();
 
-        let mut dealer = Dealer::<E>::new(domain_size, 1 << 5);
+        let mut dealer = Dealer::<E>::new(domain_size, 1 << 5, domain_size / 2 - 1);
         let (crs, _) = dealer.setup(&mut rng);
 
         let mut f = vec![Fr::zero(); domain_size];
@@ -197,50 +147,18 @@ mod tests {
             f[i] = Fr::rand(&mut rng);
         }
 
-        let fpoly = DensePolynomial::from_coefficients_vec(f.clone());
-        let com = commit_g1::<E>(&crs.powers_of_g, &fpoly);
+        let com = pedersen_commit::<G1>(&crs.powers_of_g, &f);
         let pi = open_all_values::<E>(&crs.y, &f, &domain);
 
         // verify the kzg proof
         let g = G1::generator();
         let h = G2::generator();
 
+        let fpoly = DensePolynomial::from_coefficients_vec(f.clone());
         for i in 0..domain_size {
             let lhs = E::pairing(com - (g * fpoly.evaluate(&domain.element(i))), h);
             let rhs = E::pairing(pi[i], crs.htau - (h * domain.element(i)));
             assert_eq!(lhs, rhs);
         }
-    }
-
-    #[test]
-    fn lagrange_test() {
-        let mut rng = ark_std::test_rng();
-
-        let domain_size = 1 << 5;
-        let domain = Radix2EvaluationDomain::<Fr>::new(domain_size).unwrap();
-
-        // almost_domain is {1, omega, ..., omega^(domain_size-1), tau}
-        let tau = Fr::rand(&mut rng);
-        let mut almost_domain: Vec<Fr> = domain.elements().collect();
-        almost_domain.resize(domain_size + 1, tau);
-
-        let gamma = Fr::GENERATOR;
-        let lag_coeffs = lagrange_coefficients(almost_domain, gamma);
-
-        // sample a random vector of field elements as evals
-        let evals: Vec<Fr> = (0..domain_size).map(|_| Fr::rand(&mut rng)).collect();
-        let foftau = Fr::rand(&mut rng);
-
-        let mut fofgamma = Fr::zero();
-        for i in 0..domain_size {
-            fofgamma += lag_coeffs[i] * evals[i];
-        }
-        fofgamma += lag_coeffs[domain_size] * foftau;
-
-        let f = DensePolynomial::from_coefficients_vec(interpolate_almostgood(
-            &evals, &domain, foftau, tau,
-        ));
-
-        assert_eq!(f.evaluate(&gamma), fofgamma);
     }
 }
