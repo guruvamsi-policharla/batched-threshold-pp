@@ -28,7 +28,6 @@ pub struct Ciphertext<E: Pairing> {
 }
 
 impl<E: Pairing> Ciphertext<E> {
-    // TODO: update
     /// panicks if ciphertext does not verify
     pub fn verify(&self, htau: E::G2, pk: E::G2) {
         let g = E::G1::generator();

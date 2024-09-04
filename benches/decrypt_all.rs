@@ -32,6 +32,7 @@ fn bench_decrypt_all(c: &mut Criterion) {
         for i in 0..n {
             secret_key.push(SecretKey::new(sk_shares[i]));
         }
+        let public_keys = secret_key.iter().map(|sk| sk.get_pk()).collect::<Vec<_>>();
 
         let msg = [1u8; 32];
 
@@ -52,7 +53,7 @@ fn bench_decrypt_all(c: &mut Criterion) {
             partial_decryptions.push(partial_decryption);
         }
 
-        let messages = decrypt_all(&partial_decryptions, &ct, hid, &crs);
+        let messages = decrypt_all(&public_keys, &partial_decryptions, &ct, hid, &crs);
         for i in 0..batch_size {
             assert_eq!(msg, messages[i]);
         }
@@ -60,9 +61,9 @@ fn bench_decrypt_all(c: &mut Criterion) {
         // bench full decryption
         group.bench_with_input(
             BenchmarkId::from_parameter(batch_size),
-            &(partial_decryptions, ct, hid, crs),
+            &(public_keys, partial_decryptions, ct, hid, crs),
             |b, inp| {
-                b.iter(|| decrypt_all(&inp.0, &inp.1, inp.2, &inp.3));
+                b.iter(|| decrypt_all(&inp.0, &inp.1, &inp.2, inp.3, &inp.4));
             },
         );
     }

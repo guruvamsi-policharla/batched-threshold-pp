@@ -1,4 +1,4 @@
-use ark_ec::pairing::Pairing;
+use ark_ec::{pairing::Pairing, Group};
 use ark_ff::Field;
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
 use ark_serialize::*;
@@ -18,6 +18,10 @@ pub struct SecretKey<E: Pairing> {
 impl<E: Pairing> SecretKey<E> {
     pub fn new(sk_share: E::ScalarField) -> Self {
         SecretKey { sk_share }
+    }
+
+    pub fn get_pk(&self) -> E::G2 {
+        E::G2::generator() * self.sk_share
     }
 
     /// each party in the committee computes a partial decryption
@@ -52,6 +56,7 @@ impl<E: Pairing> SecretKey<E> {
 
 /// decrypts all the ciphertexts in a batch
 pub fn decrypt_all<E: Pairing>(
+    public_keys: &Vec<E::G2>,
     partial_decryptions: &Vec<E::G1>,
     ct: &Vec<Ciphertext<E>>,
     hid: E::G1,
@@ -72,6 +77,14 @@ pub fn decrypt_all<E: Pairing>(
 
     let com = pedersen_commit::<E::G1>(&crs.powers_of_g, &fcoeffs);
     let delta = hid - com;
+
+    // check that all partial_decryptions are valid
+    for i in 0..public_keys.len() {
+        assert_eq!(
+            E::pairing(delta, public_keys[i]),
+            E::pairing(partial_decryptions[i], E::G2::generator())
+        );
+    }
 
     // compute msm with lagrange_coeffs_0 and partial_decryptions
     let sigma = pedersen_commit::<E::G1>(&partial_decryptions, &crs.lagrange_coeffs_0);

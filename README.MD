@@ -1,5 +1,4 @@
 # Batched Threshold Encryption++
-
 Rust implementation of the batched-threshold encryption++ introduced in [ePrint:2024/xxx](https://eprint.iacr.org/2024/).
 
 Use ```cargo bench``` to benchmark `encrypt`, `partial_decrypt` and `decrypt_all`.

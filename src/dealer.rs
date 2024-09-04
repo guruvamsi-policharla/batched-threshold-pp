@@ -79,7 +79,6 @@ where
         let top_tau_table = FixedBase::get_window_table(scalar_size, window_size, g);
         let y = FixedBase::msm::<E::G1>(scalar_size, window_size, &top_tau_table, &top_tau);
 
-        // TODO: secret share this with randomness
         let mut sk_shares = vec![E::ScalarField::zero(); self.n];
         sk_shares[0] = self.sk;
         for i in 1..self.t {

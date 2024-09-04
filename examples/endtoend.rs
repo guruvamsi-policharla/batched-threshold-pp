@@ -24,6 +24,7 @@ fn main() {
     for i in 0..n {
         secret_key.push(SecretKey::new(sk_shares[i]));
     }
+    let public_keys = secret_key.iter().map(|sk| sk.get_pk()).collect::<Vec<_>>();
 
     let tx_domain = Radix2EvaluationDomain::<Fr>::new(batch_size).unwrap();
 
@@ -44,7 +45,7 @@ fn main() {
         partial_decryptions.push(partial_decryption);
     }
 
-    let messages = decrypt_all(&partial_decryptions, &ct, hid, &crs);
+    let messages = decrypt_all(&public_keys, &partial_decryptions, &ct, hid, &crs);
     for i in 0..batch_size {
         assert_eq!(msg, messages[i]);
     }
