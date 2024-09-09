@@ -79,11 +79,14 @@ pub fn decrypt_all<E: Pairing>(
     let delta = hid - com;
 
     // check that all partial_decryptions are valid
+    let h_inv = -E::G2::generator();
     for i in 0..public_keys.len() {
-        assert_eq!(
-            E::pairing(delta, public_keys[i]),
-            E::pairing(partial_decryptions[i], E::G2::generator())
-        );
+        let should_be_zero =
+            E::multi_miller_loop([delta, partial_decryptions[i]], [public_keys[i], h_inv]);
+
+        let should_be_zero = E::final_exponentiation(should_be_zero).unwrap();
+
+        assert!(should_be_zero.is_zero());
     }
 
     // compute msm with lagrange_coeffs_0 and partial_decryptions
@@ -95,9 +98,9 @@ pub fn decrypt_all<E: Pairing>(
     // now decrypt each of the ciphertexts as m = ct(1) xor H(e(delta,ct2).e(pi,ct3)e(-sigma,ct4))
     let mut m = vec![[0u8; 32]; batch_size];
     for i in 0..batch_size {
-        let mask = E::pairing(pi[i], ct[i].ct2)
-            + E::pairing(delta, ct[i].ct3)
-            + E::pairing(-sigma, ct[i].ct4);
+        let mask = E::multi_miller_loop([pi[i], delta, -sigma], [ct[i].ct2, ct[i].ct3, ct[i].ct4]);
+        let mask = E::final_exponentiation(mask).unwrap();
+
         let hmask = hash_to_bytes(mask);
         m[i] = xor(&ct[i].ct1, &hmask).as_slice().try_into().unwrap();
     }
