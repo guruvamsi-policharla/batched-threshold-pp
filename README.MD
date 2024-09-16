@@ -1,5 +1,7 @@
 # Batched Threshold Encryption++
-Rust implementation of the batched-threshold encryption++ introduced in [ePrint:2024/xxx](https://eprint.iacr.org/2024/).
+Rust implementation of the improved batched-threshold encryption scheme introduced in [ePrint:2024/xxx](https://eprint.iacr.org/2024/).
+For virtually all applications, this implementation should be preferred over the [original scheme](https://github.com/guruvamsi-policharla/batched-threshold-encryption) as it does not suffer from a per epoch setup and has a much simpler initial setup.
+See the [paper-XXX](https://eprint.iacr.org/2024/) for a detailed comparison.
 
 Use ```cargo bench``` to benchmark `encrypt`, `partial_decrypt` and `decrypt_all`.
 
@@ -16,7 +18,7 @@ Use ```cargo run --example endtoend``` to check correctness of the implementatio
 * [`src/encryption`](src/encryption.rs): Contains an implementation of the `encrypt` method for the batched threshold encryption scheme.
 * [`src/decryption`](src/decryption.rs): Contains an implementation of:
   * `partial_decrypt` - computes the message sent by each member of the committee.
-  * `decrypt_all` - gathers partial decryptions and recovers all messages from the batch of ciphertexts. This uses [FK22](https://github.com/khovratovich/Kate/blob/master/Kate_amortized.pdf) to compute all KZG opening proofs in quasi-linear time.
+  * `decrypt_all` - gathers partial decryptions and recovers all messages from the batch of ciphertexts. This uses [FK20](https://github.com/khovratovich/Kate/blob/master/Kate_amortized.pdf) to compute all KZG opening proofs in quasi-linear time.
 
 ## License
 This library is released under the MIT License.
