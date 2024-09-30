@@ -1,7 +1,7 @@
 # Batched Threshold Encryption++
-Rust implementation of the improved batched-threshold encryption scheme introduced in [ePrint:2024/xxx](https://eprint.iacr.org/2024/).
+Rust implementation of the improved batched-threshold encryption scheme introduced in [ePrint:2024/1516](https://eprint.iacr.org/2024/1516).
 For virtually all applications, this implementation should be preferred over the [original scheme](https://github.com/guruvamsi-policharla/batched-threshold-encryption) as it does not suffer from a per epoch setup and has a much simpler initial setup.
-See the [paper-XXX](https://eprint.iacr.org/2024/) for a detailed comparison.
+See the [paper](https://eprint.iacr.org/2024/1516) for a detailed comparison.
 
 Use ```cargo bench``` to benchmark `encrypt`, `partial_decrypt` and `decrypt_all`.
 
