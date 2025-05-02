@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use ark_bls12_381::Bls12_381;
 use ark_ec::pairing::Pairing;
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
-use ark_std::UniformRand;
+use ark_std::{end_timer, start_timer, UniformRand};
 use batch_threshold::{
     dealer::Dealer,
     decryption::{aggregate_partial_decryptions, decrypt_all, SecretKey},
@@ -16,8 +16,10 @@ type G1 = <E as Pairing>::G1;
 
 fn main() {
     let mut rng = ark_std::test_rng();
-    let batch_size = 1 << 5;
+    let batch_size = 1 << 10;
     let n = 1 << 3;
+
+    println!("Batch size: {}, n:{}", batch_size, n);
 
     let mut dealer = Dealer::<E>::new(batch_size, n, n / 2 - 1);
     let (crs, sk_shares) = dealer.setup(&mut rng);
@@ -46,10 +48,12 @@ fn main() {
         partial_decryptions.insert(i + 1, partial_decryption);
     }
 
+    let dec_timer = start_timer!(|| "Decryption");
     let sigma = aggregate_partial_decryptions(&partial_decryptions);
 
     let messages = decrypt_all(sigma, &ct, hid, &crs);
     for i in 0..batch_size {
         assert_eq!(msg, messages[i]);
     }
+    end_timer!(dec_timer);
 }
